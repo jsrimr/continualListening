@@ -1,81 +1,99 @@
 import 'package:avatar_glow/avatar_glow.dart';
 import 'package:clipboard/clipboard.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text_example/api/speech_api.dart';
 import 'package:speech_to_text_example/main.dart';
 import 'package:speech_to_text_example/widget/substring_highlighted.dart';
 
+import '../my_provider.dart';
 import '../utils.dart';
 
-class HomePage extends StatefulWidget {
+class HomePage extends StatelessWidget {
   @override
-  _HomePageState createState() => _HomePageState();
-}
+  Widget build(BuildContext context) {
+    bool isListening = false;
+    // bool continueListening = Provider.of<Manage>(context).mode;
+    String text = Provider.of<Manage>(context).text;
+    int cnt = Provider.of<Manage>(context).cnt;
 
-class _HomePageState extends State<HomePage> {
-  String text = 'Press the button and start speaking';
-  bool isListening = false;
+    final _speech = SpeechToText();
+    final isAvailable = _speech.initialize(
+      onStatus: (status) => _speech.isListening,
+      onError: (e) => print('Error: $e'),
+    );
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: Text(MyApp.title),
-          centerTitle: true,
-          actions: [
-            Builder(
-              builder: (context) => IconButton(
-                icon: Icon(Icons.content_copy),
-                onPressed: () async {
-                  await FlutterClipboard.copy(text);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(MyApp.title),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        reverse: true,
+        padding: const EdgeInsets.all(30).copyWith(bottom: 150),
+        child: SubstringHighlight(
+          text: cnt.toString() + ' ' + text,
+          terms: Command.all,
+          textStyle: TextStyle(
+            fontSize: 32.0,
+            color: Colors.black,
+            fontWeight: FontWeight.w400,
+          ),
+          textStyleHighlight: TextStyle(
+            fontSize: 32.0,
+            color: Colors.red,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FloatingActionButton(
+            heroTag: 'btn1',
+            onPressed: () {
+              Provider.of<Manage>(context, listen: false).increment();
 
-                  Scaffold.of(context).showSnackBar(
-                    SnackBar(content: Text('✓   Copied to Clipboard')),
+
+
+              // bool continueListening = Provider.of<Manage>(context).mode;
+              while (true) {
+                if (isAvailable != null) {
+                  _speech.listen(
+                    onResult: (value) {
+                    Provider.of<Manage>(context, listen: false)
+                        .setSpeechText(value.recognizedWords);
+                    print('${value.recognizedWords} and provider value : ${text}');
+                    if (value.recognizedWords.contains('stop')) {
+                      Provider.of<Manage>(context, listen: false).changeMode(false);
+                      _speech.stop();
+                    }
+                  },
+                  partialResults: true,
+                  listenFor: Duration(seconds: 30),
                   );
-                },
-              ),
-            ),
-          ],
-        ),
-        body: SingleChildScrollView(
-          reverse: true,
-          padding: const EdgeInsets.all(30).copyWith(bottom: 150),
-          child: SubstringHighlight(
-            text: text,
-            terms: Command.all,
-            textStyle: TextStyle(
-              fontSize: 32.0,
-              color: Colors.black,
-              fontWeight: FontWeight.w400,
-            ),
-            textStyleHighlight: TextStyle(
-              fontSize: 32.0,
-              color: Colors.red,
-              fontWeight: FontWeight.w400,
-            ),
+                }
+                // continueListening = Provider.of<Manage>(context).mode;
+                //wait for 1 second
+                Future.delayed(Duration(seconds: 10));
+              }
+            },
+            child: Icon(isListening ? Icons.mic : Icons.mic_none),
           ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-        floatingActionButton: AvatarGlow(
-          animate: isListening,
-          endRadius: 75,
-          glowColor: Theme.of(context).primaryColor,
-          child: FloatingActionButton(
-            child: Icon(isListening ? Icons.mic : Icons.mic_none, size: 36),
-            onPressed: toggleRecording,
+          SizedBox(width: 20),
+          FloatingActionButton(
+            heroTag: 'btn2',
+            onPressed: () {
+              _speech.stop();
+              // continueListening = false;
+              // Provider.of<Manage>(context, listen: false).changeMode(false);
+            },
+            child: Icon(Icons.stop),
           ),
-        ),
-      );
-
-  Future toggleRecording() => SpeechApi.toggleRecording(
-        onResult: (text) => setState(() => this.text = text),
-        onListening: (isListening) {
-          setState(() => this.isListening = isListening);
-
-          if (!isListening) {
-            Future.delayed(Duration(seconds: 1), () {
-              Utils.scanText(text);
-            });
-          }
-        },
-      );
+        ],
+      ),
+    );
+  }
 }
